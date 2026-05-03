@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JEE Mock Test Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        nta: { blue: '#1e3a5f', light: '#2c5282', accent: '#3182ce', green: '#38a169', orange: '#dd6b20', red: '#e53e3e', purple: '#805ad5' }
+                    },
+                    fontFamily: { sans: ['Inter','sans-serif'], mono: ['Roboto Mono','monospace'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { scrollbar-width: thin; scrollbar-color: #4a5568 #1a202c; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #1a202c; }
+        ::-webkit-scrollbar-thumb { background: #4a5568; border-radius: 3px; }
+        .dark ::-webkit-scrollbar-track { background: #0f172a; }
+        .dark ::-webkit-scrollbar-thumb { background: #475569; }
+        .question-grid-btn { transition: all 0.2s; position: relative; }
+        .question-grid-btn:hover { transform: scale(1.1); z-index: 10; }
+        .question-grid-btn.answered { background: linear-gradient(135deg, #38a169, #2f855a); color: white; }
+        .question-grid-btn.not-answered { background: linear-gradient(135deg, #e53e3e, #c53030); color: white; }
+        .question-grid-btn.review { background: linear-gradient(135deg, #805ad5, #6b46c1); color: white; }
+        .question-grid-btn.review-answered { background: linear-gradient(135deg, #805ad5, #38a169); color: white; }
+        .question-grid-btn.current { box-shadow: 0 0 0 3px #fbbf24; }
+        .option-card { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); border: 2px solid transparent; }
+        .option-card:hover { transform: translateX(8px); }
+        .option-card.selected { border-color: #3182ce; background: linear-gradient(90deg, rgba(49,130,206,0.1), rgba(49,130,206,0.05)); }
+        .dark .option-card.selected { background: linear-gradient(90deg, rgba(49,130,206,0.2), rgba(49,130,206,0.1)); }
+        .timer-pulse { animation: pulse-red 2s infinite; }
+        @keyframes pulse-red { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+        .fade-in { animation: fadeIn 0.5s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .slide-in { animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+        .loader { border: 3px solid #f3f3f3; border-top: 3px solid #3182ce; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .glass-panel { background: rgba(255,255,255,0.8); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.3); }
+        .dark .glass-panel { background: rgba(15,23,42,0.8); border: 1px solid rgba(255,255,255,0.1); }
+        .custom-radio { appearance: none; width: 24px; height: 24px; border: 2px solid #cbd5e0; border-radius: 50%; position: relative; cursor: pointer; transition: all 0.2s; }
+        .custom-radio:checked { border-color: #3182ce; background: #3182ce; }
+        .custom-radio:checked::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 10px; height: 10px; background: white; border-radius: 50%; }
+        .dark .custom-radio { border-color: #4a5568; }
+        .btn-primary { background: linear-gradient(135deg, #3182ce, #2c5282); transition: all 0.2s; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(49,130,206,0.4); }
+        .btn-success { background: linear-gradient(135deg, #38a169, #2f855a); transition: all 0.2s; }
+        .btn-success:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(56,161,105,0.4); }
+        .btn-warning { background: linear-gradient(135deg, #dd6b20, #c05621); transition: all 0.2s; }
+        .btn-warning:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(221,107,32,0.4); }
+        .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+        #pdf-canvas { display: none; }
+        .subj-physics { border-left: 4px solid #3182ce; }
+        .subj-chemistry { border-left: 4px solid #38a169; }
+        .subj-mathematics { border-left: 4px solid #dd6b20; }
+        .subj-general { border-left: 4px solid #805ad5; }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-slate-900 text-gray-800 dark:text-gray-200 transition-colors duration-300 font-sans min-h-screen">
+
+<!-- Setup Screen -->
+<div id="setup-screen" class="min-h-screen flex items-center justify-center p-4">
+    <div class="glass-panel rounded-2xl shadow-2xl p-8 max-w-2xl w-full fade-in">
+        <div class="text-center mb-8">
+            <div class="w-20 h-20 bg-gradient-to-br from-nta-blue to-nta-accent rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-lg">
+                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            </div>
+            <h1 class="text-3xl font-bold bg-gradient-to-r from-nta-blue to-nta-accent bg-clip-text text-transparent mb-2">JEE Mock Test Simulator</h1>
+            <p class="text-gray-500 dark:text-gray-400">Upload any JEE question paper PDF - Physics, Chemistry, or Mathematics</p>
+        </div>
+
+        <div class="space-y-6">
+            <div class="relative">
+                <label class="block text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300">Upload Question Paper (PDF)</label>
+                <div class="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-8 text-center hover:border-nta-accent transition-colors cursor-pointer relative" id="drop-zone">
+                    <input type="file" id="pdf-input" accept=".pdf" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                    <svg class="w-12 h-12 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Drop PDF here or click to browse</p>
+                    <p id="file-name" class="text-sm font-medium text-nta-accent mt-2 hidden"></p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300">Hours</label>
+                    <input type="number" id="hours" min="0" max="6" value="3" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-nta-accent outline-none text-center font-mono text-lg">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300">Minutes</label>
+                    <input type="number" id="minutes" min="0" max="59" value="0" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-nta-accent outline-none text-center font-mono text-lg">
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-800 rounded-lg">
+                <div class="flex items-center gap-3">
+                    <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+                    <span class="text-sm font-medium">Dark Mode</span>
+                </div>
+                <button id="theme-toggle" class="relative w-14 h-7 bg-gray-300 dark:bg-nta-accent rounded-full transition-colors focus:outline-none">
+                    <span class="absolute left-1 top-1 w-5 h-5 bg-white rounded-full transition-transform dark:translate-x-7 shadow-md"></span>
+                </button>
+            </div>
+
+            <div id="extracted-preview" class="hidden">
+                <label class="block text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                    Extracted Questions <span id="preview-count" class="bg-nta-accent text-white px-2 py-0.5 rounded text-xs">0 found</span>
+                </label>
+                <div class="bg-gray-50 dark:bg-slate-800 rounded-lg p-4 max-h-48 overflow-y-auto text-sm font-mono" id="preview-content"></div>
+            </div>
+
+            <div id="upload-progress" class="hidden">
+                <div class="flex items-center gap-3 mb-2">
+                    <div class="loader"></div>
+                    <span class="text-sm font-medium text-nta-accent" id="progress-text">Analyzing PDF...</span>
+                </div>
+                <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div id="progress-bar" class="bg-nta-accent h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <button id="start-test" class="w-full btn-primary text-white font-semibold py-4 rounded-xl text-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                Start Mock Test
+            </button>
+
+            <div class="text-center text-xs text-gray-400 mt-4 space-y-1">
+                <p>Supports JEE Main/Advanced format with MCQ questions</p>
+                <p>Auto-detects Physics, Chemistry, and Mathematics subjects</p>
+                <p class="text-nta-accent">Tip: If PDF has images/scanned pages, use a PDF with selectable text for best results</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Test Screen -->
+<div id="test-screen" class="hidden min-h-screen flex flex-col">
+    <header class="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-gray-700 shadow-sm sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <div class="w-10 h-10 bg-gradient-to-br from-nta-blue to-nta-accent rounded-lg flex items-center justify-center">
+                        <span class="text-white font-bold text-sm">JEE</span>
+                    </div>
+                    <div>
+                        <h2 class="font-bold text-lg leading-tight">Mock Test Simulator</h2>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Computer Based Test</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-6">
+                    <div class="flex items-center gap-2 bg-gray-100 dark:bg-slate-700 px-4 py-2 rounded-lg">
+                        <svg class="w-5 h-5 text-nta-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <span id="timer" class="font-mono text-xl font-bold text-nta-blue dark:text-blue-400">03:00:00</span>
+                    </div>
+                    <button id="header-theme-toggle" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                        <svg class="w-5 h-5 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                        <svg class="w-5 h-5 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex-1 flex max-w-7xl mx-auto w-full">
+        <div class="flex-1 p-6 overflow-y-auto">
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-8 min-h-[calc(100vh-200px)]">
+                <div class="flex items-center justify-between mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
+                    <div class="flex items-center gap-3">
+                        <span class="bg-nta-blue text-white px-3 py-1 rounded-lg font-bold text-sm">Q<span id="q-number">1</span></span>
+                        <span id="q-status" class="status-badge bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-400">
+                            <span class="w-2 h-2 rounded-full bg-gray-400"></span> Not Visited
+                        </span>
+                    </div>
+                    <div class="flex items-center gap-2 text-sm text-gray-500">
+                        <span>Marks:</span><span class="font-bold text-nta-green">+4</span><span>/</span><span class="font-bold text-nta-red">-1</span>
+                    </div>
+                </div>
+
+                <div id="question-content" class="mb-8 text-lg leading-relaxed slide-in">
+                    <p class="font-medium mb-4">Loading question...</p>
+                </div>
+
+                <div id="options-container" class="space-y-3 mb-8"></div>
+
+                <div class="flex flex-wrap gap-3 pt-6 border-t border-gray-200 dark:border-gray-700">
+                    <button id="btn-save-next" class="btn-success text-white px-6 py-2.5 rounded-lg font-semibold text-sm flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                        Save & Next
+                    </button>
+                    <button id="btn-clear" class="px-6 py-2.5 rounded-lg font-semibold text-sm border-2 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        Clear Response
+                    </button>
+                    <button id="btn-save-review" class="btn-warning text-white px-6 py-2.5 rounded-lg font-semibold text-sm flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
+                        Save & Mark for Review
+                    </button>
+                    <button id="btn-review-next" class="px-6 py-2.5 rounded-lg font-semibold text-sm bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-2 border-purple-300 dark:border-purple-700 hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors flex items-center gap-2 ml-auto">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
+                        Mark for Review & Next
+                    </button>
+                </div>
+
+                <div class="flex items-center justify-between mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <button id="btn-back" class="px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors flex items-center gap-2 disabled:opacity-50">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+                        Back
+                    </button>
+                    <button id="btn-next" class="px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors flex items-center gap-2 disabled:opacity-50">
+                        Next
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="w-80 bg-white dark:bg-slate-800 border-l border-gray-200 dark:border-gray-700 p-6 overflow-y-auto">
+            <div class="mb-6">
+                <h3 class="font-semibold text-sm mb-3 text-gray-700 dark:text-gray-300">Question Status</h3>
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <div class="flex items-center gap-2"><div class="w-4 h-4 rounded bg-gray-200 dark:bg-gray-600"></div><span>Not Visited</span></div>
+                    <div class="flex items-center gap-2"><div class="w-4 h-4 rounded bg-nta-red"></div><span>Not Answered</span></div>
+                    <div class="flex items-center gap-2"><div class="w-4 h-4 rounded bg-nta-green"></div><span>Answered</span></div>
+                    <div class="flex items-center gap-2"><div class="w-4 h-4 rounded bg-nta-purple"></div><span>Marked for Review</span></div>
+                    <div class="flex items-center gap-2 col-span-2"><div class="w-4 h-4 rounded bg-gradient-to-r from-nta-purple to-nta-green"></div><span>Answered & Marked for Review</span></div>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <h3 class="font-semibold text-sm mb-3 text-gray-700 dark:text-gray-300">Question Palette</h3>
+                <div id="question-grid" class="grid grid-cols-5 gap-2"></div>
+            </div>
+
+            <div class="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 mb-6">
+                <h3 class="font-semibold text-sm mb-3">Test Summary</h3>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">Total</span><span id="summary-total" class="font-bold">0</span></div>
+                    <div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">Answered</span><span id="summary-answered" class="font-bold text-nta-green">0</span></div>
+                    <div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">Not Answered</span><span id="summary-not-answered" class="font-bold text-nta-red">0</span></div>
+                    <div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">Review</span><span id="summary-review" class="font-bold text-nta-purple">0</span></div>
+                </div>
+            </div>
+
+            <button id="btn-submit-test" class="w-full bg-nta-red hover:bg-red-700 text-white font-bold py-3 rounded-lg transition-all transform hover:scale-[1.02] shadow-lg flex items-center justify-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                Submit Test
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Results Screen -->
+<div id="results-screen" class="hidden min-h-screen p-4">
+    <div class="max-w-4xl mx-auto">
+        <div class="glass-panel rounded-2xl shadow-2xl p-8 fade-in">
+            <div class="text-center mb-8">
+                <div class="w-24 h-24 bg-gradient-to-br from-nta-green to-green-600 rounded-full mx-auto mb-4 flex items-center justify-center shadow-lg">
+                    <svg class="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </div>
+                <h1 class="text-3xl font-bold mb-2">Test Submitted!</h1>
+                <p class="text-gray-500 dark:text-gray-400">Here is your performance summary</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-xl p-6 text-center border border-blue-200 dark:border-blue-800">
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">Total Score</p>
+                    <p id="result-score" class="text-4xl font-bold text-nta-blue dark:text-blue-400">0</p>
+                </div>
+                <div class="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 rounded-xl p-6 text-center border border-green-200 dark:border-green-800">
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">Correct Answers</p>
+                    <p id="result-correct" class="text-4xl font-bold text-nta-green">0</p>
+                </div>
+                <div class="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 rounded-xl p-6 text-center border border-red-200 dark:border-red-800">
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">Incorrect Answers</p>
+                    <p id="result-incorrect" class="text-4xl font-bold text-nta-red">0</p>
+                </div>
+            </div>
+
+            <div class="bg-gray-50 dark:bg-slate-800 rounded-xl p-6 mb-8">
+                <h3 class="font-bold text-lg mb-4">Detailed Analysis</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-gray-200 dark:border-gray-700">
+                                <th class="text-left py-2 px-4">Q#</th>
+                                <th class="text-left py-2 px-4">Subject</th>
+                                <th class="text-left py-2 px-4">Your Answer</th>
+                                <th class="text-left py-2 px-4">Correct</th>
+                                <th class="text-left py-2 px-4">Status</th>
+                                <th class="text-right py-2 px-4">Marks</th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="flex gap-4 justify-center">
+                <button onclick="location.reload()" class="btn-primary text-white px-8 py-3 rounded-xl font-semibold shadow-lg">New Test</button>
+                <button id="btn-download-results" class="px-8 py-3 rounded-xl font-semibold border-2 border-nta-accent text-nta-accent hover:bg-nta-accent hover:text-white transition-all">Download Results</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Submit Modal -->
+<div id="submit-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-8 max-w-md w-full">
+        <div class="text-center mb-6">
+            <div class="w-16 h-16 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mx-auto mb-4 flex items-center justify-center">
+                <svg class="w-8 h-8 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            </div>
+            <h3 class="text-xl font-bold mb-2">Submit Test?</h3>
+            <p class="text-gray-500 dark:text-gray-400 text-sm">You cannot modify answers after submission.</p>
+        </div>
+        <div class="bg-gray-50 dark:bg-slate-700 rounded-lg p-4 mb-6 text-sm space-y-2">
+            <div class="flex justify-between"><span>Answered:</span><span id="modal-answered" class="font-bold text-nta-green">0</span></div>
+            <div class="flex justify-between"><span>Not Answered:</span><span id="modal-not-answered" class="font-bold text-nta-red">0</span></div>
+            <div class="flex justify-between"><span>Marked for Review:</span><span id="modal-review" class="font-bold text-nta-purple">0</span></div>
+        </div>
+        <div class="flex gap-3">
+            <button id="btn-cancel-submit" class="flex-1 px-4 py-3 rounded-lg border-2 border-gray-300 dark:border-gray-600 font-semibold hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">Cancel</button>
+            <button id="btn-confirm-submit" class="flex-1 btn-success text-white px-4 py-3 rounded-lg font-semibold">Yes, Submit</button>
+        </div>
+    </div>
+</div>
+
+<canvas id="pdf-canvas"></canvas>
+
+<script>
+// ==================== STATE ====================
+const state = {
+    questions: [], currentQuestion: 0, answers: {}, markedForReview: new Set(), visited: new Set(),
+    timeLimit: 0, timeRemaining: 0, timerInterval: null, isDarkMode: false, pdfText: ''
+};
+
+const elements = {
+    setupScreen: document.getElementById('setup-screen'), testScreen: document.getElementById('test-screen'),
+    resultsScreen: document.getElementById('results-screen'), pdfInput: document.getElementById('pdf-input'),
+    dropZone: document.getElementById('drop-zone'), fileName: document.getElementById('file-name'),
+    hoursInput: document.getElementById('hours'), minutesInput: document.getElementById('minutes'),
+    startBtn: document.getElementById('start-test'), themeToggle: document.getElementById('theme-toggle'),
+    headerThemeToggle: document.getElementById('header-theme-toggle'), progressBar: document.getElementById('progress-bar'),
+    progressText: document.getElementById('progress-text'), uploadProgress: document.getElementById('upload-progress'),
+    extractedPreview: document.getElementById('extracted-preview'), previewContent: document.getElementById('preview-content'),
+    previewCount: document.getElementById('preview-count'), timer: document.getElementById('timer'),
+    qNumber: document.getElementById('q-number'), qStatus: document.getElementById('q-status'),
+    questionContent: document.getElementById('question-content'), optionsContainer: document.getElementById('options-container'),
+    questionGrid: document.getElementById('question-grid'), summaryTotal: document.getElementById('summary-total'),
+    summaryAnswered: document.getElementById('summary-answered'), summaryNotAnswered: document.getElementById('summary-not-answered'),
+    summaryReview: document.getElementById('summary-review'), submitModal: document.getElementById('submit-modal'),
+    modalAnswered: document.getElementById('modal-answered'), modalNotAnswered: document.getElementById('modal-not-answered'),
+    modalReview: document.getElementById('modal-review')
+};
+
+// ==================== THEME ====================
+function initTheme() {
+    const saved = localStorage.getItem('jee-mock-theme');
+    if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        state.isDarkMode = true; document.documentElement.classList.add('dark');
+    }
+}
+function toggleTheme() {
+    state.isDarkMode = !state.isDarkMode;
+    document.documentElement.classList.toggle('dark');
+    localStorage.setItem('jee-mock-theme', state.isDarkMode ? 'dark' : 'light');
+}
+elements.themeToggle.addEventListener('click', toggleTheme);
+elements.headerThemeToggle.addEventListener('click', toggleTheme);
+
+// ==================== SUBJECT DETECTION ====================
+function detectSubject(text) {
+    const lower = text.toLowerCase();
+    const chemWords = ['mole','mol ','enthalpy','entropy','equilibrium','organic','inorganic','acid','base','salt','reaction','compound','element','ion','oxidation','reduction','catalyst','polymer','isomer','stereochemistry','thermodynamics','electrochemistry','kinetics','solution','concentration','molarity','molality','normality','titration','buffer','ph ','pka','pkb','solubility','precipitation','complex','coordination','ligand','hybridization','orbital','bond','valence','electronegativity','periodic','alkali','halogen','noble','metal','nonmetal','metalloid','allotrope','isotope','radioactivity','fission','fusion','hydrocarbon','alcohol','aldehyde','ketone','carboxylic','amine','ether','ester','amide','nitro','sulphonic','benzene','phenol','aniline','glucose','fructose','sucrose','starch','cellulose','protein','enzyme','vitamin','hormone','lipid','nucleic','dna','rna','polymerization','addition','condensation','substitution','elimination','rearrangement','markovnikov','anti-markovnikov','grignard','aldol','cannizzaro','friedel','diels','huckel','aromatic','antiaromatic','resonance','hyperconjugation','inductive','mesomeric','tautomerism','metamerism','functional','homologous','chiral','achiral','enantiomer','diastereomer','racemic','optical','geometric','cis','trans','syn','anti','exo','endo','z ','e ','r ','s ','d ','l ','fischer','haworth','newman','sawhorse','conformation','configuration','stereoisomer','constitutional','positional','chain','ring','spiro','bicyclic','heterocyclic','aromaticity','tropolone','azulene','fulvene','annulene','calicene','pyridine','pyrrole','furan','thiophene','imidazole','pyrazole','oxazole','thiazole','pyrimidine','purine','indole','quinoline','isoquinoline','acridine','phenanthridine','carbazole','dibenzofuran','xanthene','chromene','flavone','coumarin','benzopyran','steroid','terpene','alkaloid','carotenoid','chlorophyll','hemoglobin','myoglobin','cytochrome','ferredoxin','plastocyanin','nitrogenase','rubisco','pepsin','trypsin','chymotrypsin','elastase','carboxypeptidase','aminopeptidase','amylase','lipase','maltase','lactase','sucrase','nuclease','polymerase','ligase','helicase','topoisomerase','primase','telomerase','reverse','transcriptase','restriction','endonuclease','exonuclease','protease','kinase','phosphatase','cyclase','synthase','synthetase','dehydrogenase','oxidase','reductase','peroxidase','catalase','superoxide','dismutase','transferase','isomerase','epimerase','mutase','decarboxylase','deaminase','dehydratase','hydratase','lyase'];
+
+    const physWords = ['force','velocity','acceleration','momentum','energy','work','power','torque','inertia','mass','weight','gravity','friction','tension','spring','pendulum','projectile','circular','rotational','translational','vibration','oscillation','wave','frequency','amplitude','wavelength','period','phase','interference','diffraction','refraction','reflection','polarization','dispersion','spectrum','electromagnetic','electric','magnetic','field','potential','capacitance','resistance','inductance','current','voltage','charge','coulomb','ohm','farad','henry','weber','tesla','gauss','flux','dipole','monopole','conductor','insulator','semiconductor','superconductor','diode','transistor','amplifier','oscillator','rectifier','modulator','demodulator','filter','resonator','antenna','transmission','standing','traveling','longitudinal','transverse','mechanical','thermal','calorimetry','thermometer','barometer','manometer','hydrometer','viscometer','densitometer','spectrometer','interferometer','diffractometer','microscope','telescope','lens','mirror','prism','grating','slit','aperture','focal','optic','acoustic','ultrasonic','infrasonic','sonic','supersonic','hypersonic','mach','reynolds','froude','prandtl','nusselt','grashof','biot','fourier','laplace','poisson','boltzmann','planck','einstein','newton','gauss','ampere','volt','watt','joule','hertz','becquerel','gray','sievert','katal','pascal','radian','steradian','meter','kilogram','second','kelvin','candela','light','photon','electron','proton','neutron','quark','lepton','boson','fermion','hadron','baryon','meson','nucleon','hyperon','lambda','sigma','xi','omega','delta','pion','kaon','muon','tau','neutrino','gluon','w ','z ','higgs','graviton','positron','antiproton','antineutron','antimatter','dark','matter','plasma','bose','einstein','fermi','dirac','maxwell','debye','gibbs','helmholtz','clausius','carnot','otto','diesel','brayton','rankine','stirling','ericsson','lenoir','atkinson','kalina','cycle','engine','refrigerator','heat','pump','compressor','turbine','nozzle','diffuser','throttle','valve','condenser','evaporator','boiler','superheater','economizer','air','preheater','feedwater','deaerator','cooling','tower','chimney','stack','duct','pipe','fitting','flange','pump','blower','fan','motor','generator','transformer','substation','switchgear','circuit','breaker','relay','fuse','contactor','starter','inverter','converter','chopper','cycloconverter','matrix','multilevel','pwm','spwm','svpwm','shepwm','dpwm','hysteresis','delta','sigma','z-source','quasi','resonant','soft','switching','hard','flyback','forward','push','pull','half','bridge','full','buck','boost','buck-boost','cuk','sepic','zeta','switched','capacitor','inductor','coupled','tapped','lcl','llc','lcc','lc','rc','rl','rlc','notch','bandpass','bandstop','lowpass','highpass','allpass','butterworth','chebyshev','elliptic','bessel','gaussian','legendre','papoulis','halpern','parabolic','critical','monotonic','transitional','synchronous','asynchronous','squirrel','cage','wound','rotor','stator','slip','rated','full','load','no','locked','starting','pull','out','breakdown','armature','field','commutator','brush','slip','ring','segment','pole','slot','winding','lap','wave','concentric','distributed','concentrated','integral','fractional','skew','damper','amortisseur','compensating','commutating','interpole','equalizer','bar','coil','turn','conductor','strand','transposition','roebel','moebius','radial','axial','tangential','helical','spiral','involute','evolute','trochoid','cycloid','epicycloid','hypocycloid','epitrochoid','hypotrochoid','limacon','cardioid','lemniscate','cassini','oval','archimedean','logarithmic','hyperbolic','parabolic','fermat','lituus','clothoid','cornu','euler','fresnel','sine','integral','cosine','auxiliary','error','dawson','goodwin','staton','faddeeva','voigt','line','profile','broadening','doppler','natural','pressure','stark','zeeman','paschen','back','anomalous','normal','hyperfine','fine','isotope','spin','orbital','rotational','vibrational','electronic','vibronic','rovibronic','rovibrational','translational','raman','rayleigh','brillouin','mandelstam','landsberg','stokes','anti-stokes','resonance','fluorescence','phosphorescence','chemiluminescence','bioluminescence','triboluminescence','thermoluminescence','radioluminescence','electroluminescence','photoluminescence','cathodoluminescence','sonoluminescence','scintillation','cherenkov','transition','radiation','bremsstrahlung','synchrotron','undulator','wiggler','free','electron','laser','maser','gyrotron','peniotron','ubitron','carcinotron','backward','wave','traveling','tube','klystron','reflex','multi','cavity','extended','interaction','magnetron','crossed','field','strapped','rising','sun','coaxial','inverted','gyrotron','cyclotron','resonance','quasar','pulsar','blazar','seyfert','radio','galaxy','active','nuclei','agn','smbh','supermassive','black','hole','accretion','disk','jet','lobe','hot','spot','shock','front','bow','termination','heliopause','helio','sphere','astro','sphere','magneto','sphere','iono','sphere','thermo','sphere','meso','sphere','strato','sphere','tropo','sphere','exo','sphere','endo','litho','sphere','crust','mantle','outer','inner','core','astheno','sphere','meso','sphere','bary','sphere','centro','sphere','photo','sphere','chromo','sphere','corona','transition','region','helmet','streamer','prominence','filament','flare','cme','coronal','mass','ejection','sunspot','plage','facula','network','supergranule','granule','spicule','mottle','pore','light','bridge','umbral','penumbral','dot','peripheral','grain','inclination','azimuth','dopplergram','magnetogram','intensity','continuum','line','wing','core','half','width','depth','equivalent','flux','curve','growth','abundance','metallicity','alpha','enhancement','micro','macro','turbulence','damping','natural','collisional','hyperfine','molecular','atomic','ionic','nuclear','particle','high','medium','low','energy','accelerator','collider','synchrotron','cyclotron','betatron','synchrocyclotron','isochronous','sector','focused','separated','beam','current','intensity','luminosity','emittance','brilliance','brightness','coherence','monochromaticity','polarization','collimation','divergence','convergence','focusing','defocusing','quadrupole','sextupole','octupole','decapole','multipole','correctors','steerers','bump','orbit','closed','dispersion','chromaticity','tune','working','point','resonance','excitation','driving','dynamic','aperture','acceptance','survival','plot','frequency','map','diffusion','coefficient','action','angle','adiabatic','invariant','canonical','transformation','generating','function','hamiltonian','lagrangian','newtonian','relativistic','quantum','classical','statistical','thermal','equilibrium','non','steady','state','stationary','homogeneous','isotropic','anisotropic','linear','nonlinear','perturbation','approximation','first','second','order','born','distorted','wave','eikonal','wkb','jwkb','semiclassical','quasiclassical','adiabatic','sudden','impulse','time','dependent','independent','variational','rayleigh','ritz','galerkin','finite','element','difference','volume','boundary','spectral','pseudospectral','collocation','mesh','free','particle','sph','smoothed','hydrodynamics','molecular','dynamics','monte','carlo','metropolis','heat','bath','langevin','nose','hoover','andersen','berendsen','parrinello','rahman','car','cpmd','ab','initio','dft','density','functional','theory','hartree','fock','post','mp2','mp3','mp4','ccsd','ccsd(t)','cis','cisd','full','ci','mcscf','casscf','rasscf','gvb','geminal','valence','bond','resonating','generalized','perfect','pairing','strong','orthogonality','spin','coupled','cluster','equation','motion','green','function','propagator','response','linear','nonlinear','optical','rectification','second','third','harmonic','generation','sum','difference','parametric','amplification','oscillation','four','mixing','self','phase','modulation','stimulated','raman','brillouin','scattering','rayleigh','wing','kerr','effect','pockels','faraday','cotton','mouton','voigt','autler','townes','mollow','dress','state','bare','dressed','atom','field','interaction','jaynes','cummings','dicke','tavis','cummings','rabi','oscillation','collapse','revival','squeezed','coherent','thermal','fock','number','state','cat','kitten','ghz','w','bell','epr','entangled','separable','pure','mixed','density','matrix','operator','observable','hermitian','unitary','projection','measurement','von','neumann','luders','weak','strong','selective','nonselective','positive','operator','valued','measure','povm','instrument','channel','completely','positive','trace','preserving','cptp','kraus','operator','sum','representation','stinespring','dilation','purification','extension','complementary','marginal','conditional','joint','probability','distribution','density','likelihood','prior','posterior','evidence','bayes','theorem','rule','updating','inference','estimation','hypothesis','testing','model','selection','comparison','averaging','combination','information','entropy','relative','mutual','conditional','joint','differential','discrete','continuous','shannon','von','neumann','renyi','tsallis','kullback','leibler','jensen','fisher','wehrl','husimi','wigner','p','q','sudarshan','glauber','kirkwood','dirac','margenau','hill','cohen','choi','williams','zhao','atlas','marin','born','jordan','weyl','symmetric','standard','normal','antinormal','generalized','s','ordered','characteristic','function','moment','generating','cumulant','factorial','central','raw','absolute','mixed','joint','conditional','marginal','covariance','correlation','regression','least','squares','maximum','likelihood','bayesian','frequentist','confidence','credible','prediction','tolerance','interval','region','band','curve','surface','manifold','hypersurface','contour','level','set','fiber','bundle','base','space','total','projection','section','tangent','cotangent','normal','bundle','vector','principal','associated','frame','orthonormal','moving','cartan','connection','curvature','torsion','riemann','ricci','scalar','weyl','schouten','cotton','yamabe','paneitz','gauss','bonnet','chern','simons','pontryagin','euler','stiefel','whitney','wu','thom','hurewicz','homotopy','homology','cohomology','fundamental','group','higher','relative','exact','sequence','long','short','split','chain','complex','boundary','coboundary','cycle','cocycle','betti','number','euler','characteristic','genus','degree','index','intersection','self','linking','winding','twist','writhe','linking','number','framing','spin','structure','complex','almost','hermitian','symplectic','contact','poisson','jacobi','lie','algebroid','groupoid','category','functor','natural','transformation','adjunction','limit','colimit','product','coproduct','pullback','pushout','equalizer','coequalizer','kernel','cokernel','image','coimage','fiber','cofiber','homotopy','limit','colimit','derived','total','spectral','sequence','filtration','graded','associated','bigraded','differential','exact','couple','convergence','collapse','edge','comparison','theorem','serre','leray','lyndon','hoschild','spectral','sequence','grothendieck','atiyah','hirzebruch','adams','novikov','bockstein','bar','cobar','kan','complex','simplicial','singular','cellular','cw','morse','handlebody','surgery','cobordism','h','cobordism','s','cobordism','topological','piecewise','linear','differential','smooth','analytic','holomorphic','meromorphic','rational','entire','transcendental','algebraic','number','field','extension','galois','abelian','cyclic'];
+
+    const mathWords = ['calculus','derivative','integral','limit','continuity','differentiability','differentiation','integration','differential','equation','partial','ordinary','pde','ode','laplace','fourier','transform','series','sequence','convergence','divergence','absolute','conditional','uniform','pointwise','power','taylor','maclaurin','laurent','puiseux','frobenius','bessel','legendre','hermite','laguerre','chebyshev','jacobi','gegenbauer','zernike','spherical','harmonic','hypergeometric','confluent','parabolic','cylinder','mathieu','lamé','elliptic','theta','weierstrass','riemann','zeta','gamma','beta','digamma','trigamma','polygamma','incomplete','error','erf','erfc','fresnel','sine','cosine','integral','exponential','logarithmic','logarithm','natural','common','binary','complex','argument','modulus','phase','real','imaginary','conjugate','polar','rectangular','cartesian','spherical','cylindrical','parabolic','bipolar','elliptic','toroidal','prolate','oblate','confocal','orthogonal','curvilinear','coordinate','system','vector','scalar','tensor','matrix','determinant','rank','nullity','trace','eigenvalue','eigenvector','characteristic','polynomial','minimal','jordan','canonical','form','rational','smith','normal','companion','frobenius','companion','hessenberg','tridiagonal','banded','sparse','dense','symmetric','skew','hermitian','unitary','orthogonal','rotation','reflection','projection','permutation','diagonal','triangular','upper','lower','block','banded','toeplitz','hankel','vandermonde','cauchy','hilbert','pascal','circulant','companion','resultant','discriminant','resolvent','characteristic','minimal','annihilating','cayley','hamilton','spectral','theorem','singular','value','decomposition','svd','qr','lu','cholesky','schur','hessenberg','tridiagonal','bidiagonal','diagonalization','triangularization','factorization','decomposition','expansion','reduction','elimination','gaussian','gauss','jordan','crout','doolittle','banachiewicz','cholesky','modified','incomplete','sparse','direct','iterative','jacobi','gauss','seidel','successive','over','relaxation','sor','conjugate','gradient','cg','bicg','bicgstab','gmres','qmr','tfqmr','minres','symmlq','cgs','lsqr','preconditioned','incomplete','ilu','ic','multigrid','algebraic','geometric','domain','decomposition','additive','schwarz','multiplicative','feti','bddc','balancing','neumann','dirichlet','robin','fourier','chebyshev','spectral','pseudospectral','collocation','galerkin','petrov','rayleigh','ritz','least','squares','weighted','moving','kernel','local','polynomial','loess','lowess','spline','b','cubic','natural','clamped','not','knot','periodic','hermite','catmull','rom','bezier','bernstein','de','casteljau','blossoming','polar','form',' subdivision','box','corner','cutting','chaikin','dyn','levin','lane','riesenfeld','four','point','interpolatory','approximating','refinement','scheme','wavelet','multiresolution','analysis','scaling','function','father','mother','detail','approximation','coarse','fine','resolution','level','scale','octave','band','subband','filter','bank','perfect','reconstruction','orthonormal','biorthogonal','semi','orthogonal','lifting','lazy','predict','update','primal','dual','vanishing','moment','regularity','smoothness','support','compactly','decay','localization','heisenberg','uncertainty','principle','balian','low','coherent','frame','tight','exact','parseval','riesz','basis','unconditional','conditional','schauder','hamel','algebraic','topological','dual','predual','bidual','reflexive','separable','complete','incomplete','banach','hilbert','sobolev','besov','triebel','lizorkin','hardy','bmoa','vmoa','bloch','lipschitz','holder','zygmund','campanato','morrey','lebesgue','lorentz','orlicz','musielak','variable','exponent','modular','luxemburg','norm','gauge','minkowski','functional','support','epigraph','hypograph','convex','concave','quasiconvex','quasiconcave','logarithmically','midpoint','strictly','strongly','uniformly','essentially','proper','lower','upper','semicontinuous','continuous','lsc','usc','clarke','generalized','subdifferential','proximal','limiting','mordukhovich','basic','coderivative','normal','cone','tangent','contingent','polar','negative','dual','polar','barrier','penalty','augmented','lagrangian','duality','gap','saddle','point','minimax','von','neumann','ky','fan','sion','kakutani','fixed','point','banach','brouwer','schauder','tychonoff','markov','kakutani','leray','schauder','degree','index','intersection','fixed','point','theorem','attractor','repeller','basin','boundary','wada','strange','chaotic','hyperbolic','nonuniformly','partially','fully','almost','quasi','pseudo','lyapunov','exponent','spectrum','oseldec','multiplicative','ergodic','theorem','birkhoff','von','neumann','individual','statistical','mean','space','time','average','correlation','dimension','entropy','capacity','box','counting','information','hausdorff','packing','similarity','fractal','self','similar','affine','iterated','function','system','ifs','attractor','repeller','condensation','set','mandelbrot','julia','fatou','filled','connected','disconnected','cantor','sierpinski','carpet','triangle','gasket','sponge','curve','koch','peano','space','filling','dragon','heighway','levy','cesaro','blancmange','takagi','weierstrass',' nowhere','differentiable','continuous','brownian','motion','wiener','process','random','walk','martingale','submartingale','supermartingale','local','semimartingale','quasimartingale','amart','asymptotic','potential','superharmonic','subharmonic','harmonic','plurisubharmonic','plurisuperharmonic','pluriharmonic','holomorphic','meromorphic','entire','transcendental','rational','algebraic','function','polynomial','monomial','binomial','trinomial','multinomial','quadratic','cubic','quartic','quintic','sextic','septic','octic','nonic','decic','symmetric','alternating','cyclic','dihedral','abelian','solvable','nilpotent','simple','group','ring','field','module','vector','space','algebra','lie','jordan','clifford','grassmann','exterior','tensor','symmetric','wedge','wedge','product','cup','cap','slant','shuffle','homology','cohomology','homotopy','fundamental','higher','relative','exact','sequence','long','short','split','chain','complex','boundary','coboundary','cycle','cocycle','betti','number','euler','characteristic','genus','degree','index','intersection','self','linking','winding','twist','writhe','linking','number','framing','spin','structure','complex','almost','hermitian','symplectic','contact','poisson','jacobi','lie','algebroid','groupoid','category','functor','natural','transformation','adjunction','limit','colimit','product','coproduct','pullback','pushout','equalizer','coequalizer','kernel','cokernel','image','coimage','fiber','cofiber','homotopy','limit','colimit','derived','total','spectral','sequence','filtration','graded','associated','bigraded','differential','exact','couple','convergence','collapse','edge','comparison','theorem','serre','leray','lyndon','hoschild','spectral','sequence','grothendieck','atiyah','hirzebruch','adams','novikov','bockstein','bar','cobar','kan','complex','simplicial','singular','cellular','cw','morse','handlebody','surgery','cobordism','h','cobordism','s','cobordism','topological','piecewise','linear','differential','smooth','analytic','holomorphic','meromorphic','rational','entire','transcendental','algebraic','number','field','extension','galois','abelian','cyclic'];
+
+    let chemScore = 0, physScore = 0, mathScore = 0;
+    chemWords.forEach(w => { if (lower.includes(w)) chemScore++; });
+    physWords.forEach(w => { if (lower.includes(w)) physScore++; });
+    mathWords.forEach(w => { if (lower.includes(w)) mathScore++; });
+
+    if (chemScore > physScore && chemScore > mathScore) return 'Chemistry';
+    if (physScore > chemScore && physScore > mathScore) return 'Physics';
+    if (mathScore > chemScore && mathScore > physScore) return 'Mathematics';
+    if (chemScore > 0 || physScore > 0 || mathScore > 0) {
+        const max = Math.max(chemScore, physScore, mathScore);
+        if (max === chemScore) return 'Chemistry';
+        if (max === physScore) return 'Physics';
+        return 'Mathematics';
+    }
+    return 'General';
+}
+
+// ==================== PDF PROCESSING ====================
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+elements.pdfInput.addEventListener('change', handleFileSelect);
+elements.dropZone.addEventListener('dragover', (e) => { e.preventDefault(); elements.dropZone.classList.add('border-nta-accent'); });
+elements.dropZone.addEventListener('dragleave', () => elements.dropZone.classList.remove('border-nta-accent'));
+elements.dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    elements.dropZone.classList.remove('border-nta-accent');
+    const files = e.dataTransfer.files;
+    if (files.length) handleFile(files[0]);
+});
+
+function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (file) handleFile(file);
+}
+
+async function handleFile(file) {
+    if (!file.type.includes('pdf')) {
+        alert('Please upload a PDF file');
+        return;
+    }
+
+    elements.fileName.textContent = file.name;
+    elements.fileName.classList.remove('hidden');
+    elements.uploadProgress.classList.remove('hidden');
+    elements.startBtn.disabled = true;
+
+    try {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+        let fullText = '';
+        const totalPages = pdf.numPages;
+
+        for (let i = 1; i <= totalPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            const pageText = textContent.items.map(item => item.str).join(' ');
+            fullText += pageText + '\n';
+
+            const progress = (i / totalPages) * 50;
+            elements.progressBar.style.width = progress + '%';
+            elements.progressText.textContent = `Extracting page ${i} of ${totalPages}...`;
+        }
+
+        state.pdfText = fullText;
+        elements.progressBar.style.width = '60%';
+        elements.progressText.textContent = 'Analyzing questions...';
+
+        // Parse questions from text
+        const questions = parseQuestionsFromText(fullText);
+
+        if (questions.length === 0) {
+            elements.progressText.textContent = 'No questions found. Using demo mode...';
+            createDemoQuestions();
+        } else {
+            state.questions = questions;
+        }
+
+        elements.progressBar.style.width = '100%';
+        elements.progressText.textContent = `Found ${state.questions.length} questions!`;
+
+        // Show preview
+        elements.extractedPreview.classList.remove('hidden');
+        elements.previewCount.textContent = `${state.questions.length} found`;
+        elements.previewContent.textContent = state.questions.map((q, i) => 
+            `[${q.subject}] Q${i+1}: ${q.text.substring(0, 80)}...\nA) ${q.options[0]?.substring(0,30)||''}...\n---`
+        ).join('\n');
+
+        elements.startBtn.disabled = false;
+
+    } catch (error) {
+        console.error('PDF parsing error:', error);
+        elements.progressText.textContent = 'PDF parsing failed. Using demo mode.';
+        createDemoQuestions();
+        elements.startBtn.disabled = false;
+    }
+}
+
+function parseQuestionsFromText(text) {
+    const questions = [];
+
+    // Clean up text - preserve chemical formulas
+    const cleanText = text.replace(/\s+/g, ' ').trim();
+
+    // Try multiple patterns to find questions
+    // Pattern 1: Numbered questions like "1.", "Q1.", "Question 1:"
+    // Pattern 2: Chemistry style with lowercase options a) b) c) d)
+    // Pattern 3: Standard A) B) C) D) options
+
+    const questionBlocks = splitIntoQuestionBlocks(cleanText);
+
+    for (const block of questionBlocks) {
+        if (block.length < 50) continue;
+
+        const parsed = parseQuestionBlock(block);
+        if (parsed && parsed.options.length >= 2) {
+            questions.push(parsed);
+        }
+    }
+
+    return questions.slice(0, 90);
+}
+
+function splitIntoQuestionBlocks(text) {
+    const blocks = [];
+
+    // Try to split by question numbers
+    // Pattern: "1." or "Q1." or "Question 1" followed by text until next number
+    const qPattern = /(?:^|\n)(?:Q(?:uestion)?\s*)?(\d+)[.\):\s]+(.*?)(?=(?:^|\n)(?:Q(?:uestion)?\s*)?(\d+)[.\):\s]+|$)/gis;
+
+    let match;
+    const matches = [];
+    while ((match = qPattern.exec(text)) !== null) {
+        matches.push({ num: parseInt(match[1]), text: match[2] });
+    }
+
+    if (matches.length > 0) {
+        return matches.map(m => m.text);
+    }
+
+    // Fallback: split by option patterns
+    // Look for blocks that contain options
+    const optionPatterns = [
+        /[A-D][.\)]\s*[^A-D]{3,}/g,
+        /[a-d][.\)]\s*[^a-d]{3,}/g,
+        /[(]?[①②③④][)]?\s*/g
+    ];
+
+    // Split by double newlines or sentences that look like question starts
+    const chunks = text.split(/(?:\n\n|\.\s+(?=[A-Z][a-z]+\s+(?:is|are|was|were|has|have|had|do|does|did|can|could|will|would|shall|should|may|might|must|ought|need|dare|used|is|are|am|be|being|been|go|goes|went|gone|going|make|makes|made|making|take|takes|took|taken|taking|come|comes|came|come|coming|see|sees|saw|seen|seeing|know|knows|knew|known|knowing|get|gets|got|gotten|getting|give|gives|gave|given|giving|find|finds|found|finding|think|thinks|thought|thinking|tell|tells|told|telling|become|becomes|became|become|becoming|show|shows|showed|shown|showing|leave|leaves|left|leaving|feel|feels|felt|feeling|put|puts|put|putting|bring|brings|brought|bringing|begin|begins|began|begun|beginning|keep|keeps|kept|keeping|hold|holds|held|holding|write|writes|wrote|written|writing|stand|stands|stood|standing|hear|hears|heard|hearing|let|lets|let|letting|mean|means|meant|meaning|set|sets|set|setting|meet|meets|met|meeting|run|runs|ran|run|running|pay|pays|paid|paying|sit|sits|sat|sitting|speak|speaks|spoke|spoken|speaking|lie|lies|lay|lain|lying|lead|leads|led|leading|read|reads|read|reading|grow|grows|grew|grown|growing|lose|loses|lost|losing|fall|falls|fell|fallen|falling|send|sends|sent|sending|build|builds|built|building|understand|understands|understood|understanding|draw|draws|drew|drawn|drawing|break|breaks|broke|broken|breaking|spend|spends|spent|spending|cut|cuts|cut|cutting|rise|rises|rose|risen|rising|drive|drives|drove|driven|driving|buy|buys|bought|buying|wear|wears|wore|worn|wearing|choose|chooses|chose|chosen|choosing)))/);
+
+    // Simple fallback: split into chunks of ~500 chars
+    if (chunks.length < 2) {
+        const words = text.split(/\s+/);
+        let currentChunk = '';
+        for (const word of words) {
+            currentChunk += word + ' ';
+            if (currentChunk.length > 400) {
+                blocks.push(currentChunk.trim());
+                currentChunk = '';
+            }
+        }
+        if (currentChunk.trim()) blocks.push(currentChunk.trim());
+    } else {
+        blocks.push(...chunks.filter(c => c.length > 50));
+    }
+
+    return blocks;
+}
+
+function parseQuestionBlock(block) {
+    // Extract question text (everything before options)
+    let qText = block;
+    let options = [];
+    let correctAnswer = -1;
+
+    // Try to find options with various patterns
+    // Pattern 1: A) B) C) D) or A. B. C. D.
+    const optPattern1 = /([A-D])[.\)]\s*([^A-D]{2,100}?)(?=\s*(?:[A-D][.\)]|Answer|Correct|Solution|$))/gi;
+    const matches1 = [...block.matchAll(optPattern1)];
+
+    // Pattern 2: a) b) c) d) or a. b. c. d. (chemistry style)
+    const optPattern2 = /([a-d])[.\)]\s*([^a-d]{2,100}?)(?=\s*(?:[a-d][.\)]|Answer|Correct|Solution|$))/gi;
+    const matches2 = [...block.matchAll(optPattern2)];
+
+    // Pattern 3: (1) (2) (3) (4) or 1. 2. 3. 4.
+    const optPattern3 = /[(]?(\d+)[)]?\s*([^\d]{2,100}?)(?=\s*(?:[(]?\d+[)]?|Answer|Correct|Solution|$))/g;
+    const matches3 = [...block.matchAll(optPattern3)];
+
+    // Use the pattern that gives the most valid options
+    let bestMatches = [];
+    let optionType = '';
+
+    if (matches1.length >= 2) {
+        bestMatches = matches1;
+        optionType = 'upper';
+    } else if (matches2.length >= 2) {
+        bestMatches = matches2;
+        optionType = 'lower';
+    } else if (matches3.length >= 2) {
+        bestMatches = matches3;
+        optionType = 'number';
+    }
+
+    if (bestMatches.length >= 2) {
+        // Extract options
+        options = bestMatches.map(m => m[2].trim());
+
+        // Remove options from question text
+        qText = block.substring(0, block.indexOf(bestMatches[0][0])).trim();
+
+        // Try to extract correct answer
+        const ansPattern = /(?:Answer|Correct|Solution)[^:]*:\s*([A-Da-d1-4])/i;
+        const ansMatch = block.match(ansPattern);
+        if (ansMatch) {
+            const ans = ansMatch[1];
+            if (optionType === 'upper') {
+                correctAnswer = ans.toUpperCase().charCodeAt(0) - 65;
+            } else if (optionType === 'lower') {
+                correctAnswer = ans.toLowerCase().charCodeAt(0) - 97;
+            } else {
+                correctAnswer = parseInt(ans) - 1;
+            }
+        }
+    }
+
+    // Clean up question text
+    qText = qText.replace(/(?:Question|Q)\s*\d+[.\):\s]*/i, '').trim();
+    qText = qText.replace(/(?:Answer|Correct|Solution).*$/i, '').trim();
+
+    if (qText.length < 10 || options.length < 2) {
+        return null;
+    }
+
+    // Detect subject from question text
+    const subject = detectSubject(qText + ' ' + options.join(' '));
+
+    return {
+        id: questions.length + 1,
+        text: qText,
+        options: options.slice(0, 4),
+        correctAnswer: correctAnswer >= 0 && correctAnswer < 4 ? correctAnswer : 0,
+        subject: subject
+    };
+}
+
+function createDemoQuestions() {
+    const subjects = ['Physics', 'Chemistry', 'Mathematics'];
+    const demoQuestions = [
+        {
+            text: "A LCR circuit behaves like a damped harmonic oscillator. Comparing it with a physical spring-mass damped oscillator having damping constant 'b', the correct equivalence would be:",
+            options: ["L ↔ m, C ↔ k, R ↔ b", "L ↔ m, C ↔ 1/k, R ↔ b", "L ↔ 1/m, C ↔ k, R ↔ b", "L ↔ m, C ↔ k, R ↔ 1/b"],
+            correctAnswer: 1
+        },
+        {
+            text: "The work function of a metal is 2.5 eV. When photons of energy 4.5 eV are incident on it, the maximum kinetic energy of emitted photoelectrons will be:",
+            options: ["2.0 eV", "7.0 eV", "4.5 eV", "2.5 eV"],
+            correctAnswer: 0
+        },
+        {
+            text: "Which of the following compounds will exhibit geometrical isomerism?",
+            options: ["1-Pentene", "2-Pentene", "2-Methyl-2-butene", "2-Methyl-1-butene"],
+            correctAnswer: 1
+        },
+        {
+            text: "The rate constant of a reaction is 2.5 × 10⁻³ mol L⁻¹ s⁻¹. The order of the reaction is:",
+            options: ["Zero", "First", "Second", "Third"],
+            correctAnswer: 0
+        },
+        {
+            text: "If the sum of the coefficients in the expansion of (x + y)ⁿ is 4096, then the greatest coefficient in the expansion is:",
+            options: ["792", "924", "1024", "None of these"],
+            correctAnswer: 1
+        }
+    ];
+
+    for (let i = 0; i < 30; i++) {
+        const base = demoQuestions[i % demoQuestions.length];
+        state.questions.push({
+            id: i + 1,
+            text: base.text,
+            options: [...base.options],
+            correctAnswer: base.correctAnswer,
+            subject: subjects[i % 3]
+        });
+    }
+}
+
+// ==================== TEST MANAGEMENT ====================
+elements.startBtn.addEventListener('click', startTest);
+
+function startTest() {
+    const hours = parseInt(elements.hoursInput.value) || 0;
+    const minutes = parseInt(elements.minutesInput.value) || 0;
+    state.timeLimit = (hours * 3600 + minutes * 60) * 1000;
+    state.timeRemaining = state.timeLimit;
+
+    elements.setupScreen.classList.add('hidden');
+    elements.testScreen.classList.remove('hidden');
+
+    renderQuestionGrid();
+    loadQuestion(0);
+    startTimer();
+    updateSummary();
+}
+
+function startTimer() {
+    const endTime = Date.now() + state.timeRemaining;
+
+    state.timerInterval = setInterval(() => {
+        const remaining = endTime - Date.now();
+
+        if (remaining <= 0) {
+            clearInterval(state.timerInterval);
+            submitTest();
+            return;
+        }
+
+        state.timeRemaining = remaining;
+        const hrs = Math.floor(remaining / 3600000);
+        const mins = Math.floor((remaining % 3600000) / 60000);
+        const secs = Math.floor((remaining % 60000) / 1000);
+
+        elements.timer.textContent = 
+            `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+
+        if (remaining < 300000) {
+            elements.timer.classList.add('text-nta-red', 'timer-pulse');
+            elements.timer.classList.remove('text-nta-blue', 'dark:text-blue-400');
+        }
+    }, 1000);
+}
+
+function loadQuestion(index) {
+    if (index < 0 || index >= state.questions.length) return;
+
+    state.currentQuestion = index;
+    state.visited.add(index);
+
+    const q = state.questions[index];
+
+    elements.questionContent.classList.remove('slide-in');
+    void elements.questionContent.offsetWidth;
+    elements.questionContent.classList.add('slide-in');
+
+    elements.qNumber.textContent = index + 1;
+
+    // Subject badge with color
+    const subjColors = {
+        'Physics': 'text-blue-600 bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300',
+        'Chemistry': 'text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-300',
+        'Mathematics': 'text-orange-600 bg-orange-100 dark:bg-orange-900/30 dark:text-orange-300',
+        'General': 'text-purple-600 bg-purple-100 dark:bg-purple-900/30 dark:text-purple-300'
+    };
+    const subjClass = subjColors[q.subject] || subjColors['General'];
+
+    elements.questionContent.innerHTML = `
+        <div class="mb-3 flex items-center gap-2">
+            <span class="px-3 py-1 rounded-full text-xs font-bold ${subjClass}">${q.subject}</span>
+        </div>
+        <p class="font-medium text-lg leading-relaxed subj-${q.subject.toLowerCase()}">${escapeHtml(q.text)}</p>
+    `;
+
+    elements.optionsContainer.innerHTML = '';
+    q.options.forEach((opt, i) => {
+        const isSelected = state.answers[index] === i;
+        const optionCard = document.createElement('div');
+        optionCard.className = `option-card flex items-center gap-4 p-4 rounded-xl cursor-pointer border-2 ${isSelected ? 'selected border-nta-accent bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-slate-700'}`;
+        optionCard.innerHTML = `
+            <input type="radio" name="option" value="${i}" class="custom-radio" ${isSelected ? 'checked' : ''}>
+            <span class="font-mono font-bold text-nta-accent">${String.fromCharCode(65 + i)}.</span>
+            <span class="flex-1">${escapeHtml(opt)}</span>
+        `;
+        optionCard.addEventListener('click', () => selectOption(i));
+        elements.optionsContainer.appendChild(optionCard);
+    });
+
+    updateQuestionStatus();
+    updateGridButtons();
+    updateNavButtons();
+}
+
+function selectOption(optionIndex) {
+    state.answers[state.currentQuestion] = optionIndex;
+    loadQuestion(state.currentQuestion);
+    updateSummary();
+}
+
+function updateQuestionStatus() {
+    const idx = state.currentQuestion;
+    let statusHtml = '';
+
+    if (state.answers[idx] !== undefined && state.markedForReview.has(idx)) {
+        statusHtml = `<span class="w-2 h-2 rounded-full bg-nta-purple"></span> Answered & Marked for Review`;
+    } else if (state.answers[idx] !== undefined) {
+        statusHtml = `<span class="w-2 h-2 rounded-full bg-nta-green"></span> Answered`;
+    } else if (state.markedForReview.has(idx)) {
+        statusHtml = `<span class="w-2 h-2 rounded-full bg-nta-purple"></span> Marked for Review`;
+    } else if (state.visited.has(idx)) {
+        statusHtml = `<span class="w-2 h-2 rounded-full bg-nta-red"></span> Not Answered`;
+    } else {
+        statusHtml = `<span class="w-2 h-2 rounded-full bg-gray-400"></span> Not Visited`;
+    }
+
+    elements.qStatus.innerHTML = statusHtml;
+}
+
+function renderQuestionGrid() {
+    elements.questionGrid.innerHTML = '';
+    state.questions.forEach((_, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'question-grid-btn w-full aspect-square rounded-lg font-mono text-sm font-bold flex items-center justify-center';
+        btn.textContent = i + 1;
+        btn.addEventListener('click', () => loadQuestion(i));
+        elements.questionGrid.appendChild(btn);
+    });
+    updateGridButtons();
+}
+
+function updateGridButtons() {
+    const buttons = elements.questionGrid.children;
+    for (let i = 0; i < buttons.length; i++) {
+        const btn = buttons[i];
+        btn.className = 'question-grid-btn w-full aspect-square rounded-lg font-mono text-sm font-bold flex items-center justify-center';
+
+        if (i === state.currentQuestion) {
+            btn.classList.add('current');
+        }
+
+        if (state.answers[i] !== undefined && state.markedForReview.has(i)) {
+            btn.classList.add('review-answered');
+        } else if (state.markedForReview.has(i)) {
+            btn.classList.add('review');
+        } else if (state.answers[i] !== undefined) {
+            btn.classList.add('answered');
+        } else if (state.visited.has(i)) {
+            btn.classList.add('not-answered');
+        } else {
+            btn.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
+        }
+    }
+}
+
+function updateNavButtons() {
+    document.getElementById('btn-back').disabled = state.currentQuestion === 0;
+    document.getElementById('btn-next').disabled = state.currentQuestion === state.questions.length - 1;
+}
+
+function updateSummary() {
+    const total = state.questions.length;
+    const answered = Object.keys(state.answers).length;
+    const notAnswered = state.visited.size - answered;
+    const review = state.markedForReview.size;
+
+    elements.summaryTotal.textContent = total;
+    elements.summaryAnswered.textContent = answered;
+    elements.summaryNotAnswered.textContent = Math.max(0, notAnswered);
+    elements.summaryReview.textContent = review;
+}
+
+// ==================== BUTTON HANDLERS ====================
+document.getElementById('btn-save-next').addEventListener('click', () => {
+    if (state.currentQuestion < state.questions.length - 1) {
+        loadQuestion(state.currentQuestion + 1);
+    }
+});
+
+document.getElementById('btn-clear').addEventListener('click', () => {
+    delete state.answers[state.currentQuestion];
+    loadQuestion(state.currentQuestion);
+    updateSummary();
+});
+
+document.getElementById('btn-save-review').addEventListener('click', () => {
+    if (state.answers[state.currentQuestion] !== undefined) {
+        state.markedForReview.add(state.currentQuestion);
+        if (state.currentQuestion < state.questions.length - 1) {
+            loadQuestion(state.currentQuestion + 1);
+        }
+    }
+});
+
+document.getElementById('btn-review-next').addEventListener('click', () => {
+    state.markedForReview.add(state.currentQuestion);
+    if (state.currentQuestion < state.questions.length - 1) {
+        loadQuestion(state.currentQuestion + 1);
+    }
+});
+
+document.getElementById('btn-back').addEventListener('click', () => {
+    if (state.currentQuestion > 0) loadQuestion(state.currentQuestion - 1);
+});
+
+document.getElementById('btn-next').addEventListener('click', () => {
+    if (state.currentQuestion < state.questions.length - 1) loadQuestion(state.currentQuestion + 1);
+});
+
+// ==================== SUBMIT TEST ====================
+document.getElementById('btn-submit-test').addEventListener('click', showSubmitModal);
+document.getElementById('btn-cancel-submit').addEventListener('click', () => elements.submitModal.classList.add('hidden'));
+document.getElementById('btn-confirm-submit').addEventListener('click', submitTest);
+
+function showSubmitModal() {
+    const answered = Object.keys(state.answers).length;
+    const notAnswered = state.questions.length - answered;
+    const review = state.markedForReview.size;
+
+    elements.modalAnswered.textContent = answered;
+    elements.modalNotAnswered.textContent = notAnswered;
+    elements.modalReview.textContent = review;
+    elements.submitModal.classList.remove('hidden');
+}
+
+function submitTest() {
+    clearInterval(state.timerInterval);
+    elements.submitModal.classList.add('hidden');
+    elements.testScreen.classList.add('hidden');
+    elements.resultsScreen.classList.remove('hidden');
+
+    let score = 0;
+    let correct = 0;
+    let incorrect = 0;
+    const results = [];
+
+    state.questions.forEach((q, i) => {
+        const userAns = state.answers[i];
+        const isCorrect = userAns === q.correctAnswer;
+        const marks = isCorrect ? 4 : (userAns !== undefined ? -1 : 0);
+
+        if (isCorrect) correct++;
+        else if (userAns !== undefined) incorrect++;
+
+        score += marks;
+
+        results.push({
+            question: q.text.substring(0, 50) + '...',
+            subject: q.subject,
+            userAnswer: userAns !== undefined ? String.fromCharCode(65 + userAns) : '-',
+            correctAnswer: String.fromCharCode(65 + q.correctAnswer),
+            isCorrect,
+            marks
+        });
+    });
+
+    document.getElementById('result-score').textContent = score;
+    document.getElementById('result-correct').textContent = correct;
+    document.getElementById('result-incorrect').textContent = incorrect;
+
+    const tbody = document.getElementById('results-table-body');
+    tbody.innerHTML = results.map((r, i) => `
+        <tr class="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-slate-700/50">
+            <td class="py-3 px-4">Q${i+1}</td>
+            <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs font-bold ${
+                r.subject === 'Physics' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' :
+                r.subject === 'Chemistry' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
+                r.subject === 'Mathematics' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300' :
+                'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
+            }">${r.subject}</span></td>
+            <td class="py-3 px-4 font-mono">${r.userAnswer}</td>
+            <td class="py-3 px-4 font-mono text-nta-green">${r.correctAnswer}</td>
+            <td class="py-3 px-4">
+                <span class="px-2 py-1 rounded text-xs font-bold ${r.isCorrect ? 'bg-green-100 text-green-700' : r.userAnswer === '-' ? 'bg-gray-100 text-gray-600' : 'bg-red-100 text-red-700'}">${r.isCorrect ? 'Correct' : r.userAnswer === '-' ? 'Not Attempted' : 'Incorrect'}</span>
+            </td>
+            <td class="py-3 px-4 text-right font-mono ${r.marks >= 0 ? 'text-nta-green' : 'text-nta-red'}">${r.marks > 0 ? '+' : ''}${r.marks}</td>
+        </tr>
+    `).join('');
+}
+
+// ==================== UTILITIES ====================
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+    if (elements.testScreen.classList.contains('hidden')) return;
+
+    if (e.key >= '1' && e.key <= '4') {
+        selectOption(parseInt(e.key) - 1);
+    } else if (e.key === 'ArrowLeft') {
+        document.getElementById('btn-back').click();
+    } else if (e.key === 'ArrowRight') {
+        document.getElementById('btn-next').click();
+    } else if (e.key === 's' || e.key === 'S') {
+        document.getElementById('btn-save-next').click();
+    } else if (e.key === 'r' || e.key === 'R') {
+        document.getElementById('btn-review-next').click();
+    }
+});
+
+// Initialize
+initTheme();
+</script>
+</body>
+</html>
