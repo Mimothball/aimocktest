@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JEE Mock Test Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        nta: { blue: '#1e3a5f', light: '#2c5282', accent: '#3182ce', green: '#38a169', orange: '#dd6b20', red: '#e53e3e', purple: '#805ad5' }
+                    },
+                    fontFamily: { sans: ['Inter','sans-serif'], mono: ['Roboto Mono','monospace'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { scrollbar-width: thin; scrollbar-color: #4a5568 #1a202c; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #1a202c; }
+        ::-webkit-scrollbar-thumb { background: #4a5568; border-radius: 3px; }
+        .dark ::-webkit-scrollbar-track { background: #0f172a; }
+        .dark ::-webkit-scrollbar-thumb { background: #475569; }
+        .question-grid-btn { transition: all 0.2s; position: relative; }
+        .question-grid-btn:hover { transform: scale(1.1); z-index: 10; }
+        .question-grid-btn.answered { background: linear-gradient(135deg, #38a169, #2f855a); color: white; }
+        .question-grid-btn.not-answered { background: linear-gradient(135deg, #e53e3e, #c53030); color: white; }
+        .question-grid-btn.review { background: linear-gradient(135deg, #805ad5, #6b46c1); color: white; }
+        .question-grid-btn.review-answered { background: linear-gradient(135deg, #805ad5, #38a169); color: white; }
+        .question-grid-btn.current { box-shadow: 0 0 0 3px #fbbf24; }
+        .option-card { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); border: 2px solid transparent; }
+        .option-card:hover { transform: translateX(8px); }
+        .option-card.selected { border-color: #3182ce; background: linear-gradient(90deg, rgba(49,130,206,0.1), rgba(49,130,206,0.05)); }
+        .dark .option-card.selected { background: linear-gradient(90deg, rgba(49,130,206,0.2), rgba(49,130,206,0.1)); }
+        .timer-pulse { animation: pulse-red 2s infinite; }
+        @keyframes pulse-red { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+        .fade-in { animation: fadeIn 0.5s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .slide-in { animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+        .loader { border: 3px solid #f3f3f3; border-top: 3px solid #3182ce; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .glass-panel { background: rgba(255,255,255,0.8); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.3); }
+        .dark .glass-panel { background: rgba(15,23,42,0.8); border: 1px solid rgba(255,255,255,0.1); }
+        .custom-radio { appearance: none; width: 24px; height: 24px; border: 2px solid #cbd5e0; border-radius: 50%; position: relative; cursor: pointer; transition: all 0.2s; }
+        .custom-radio:checked { border-color: #3182ce; background: #3182ce; }
+        .custom-radio:checked::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 10px; height: 10px; background: white; border-radius: 50%; }
+        .dark .custom-radio { border-color: #4a5568; }
+        .btn-primary { background: linear-gradient(135deg, #3182ce, #2c5282); transition: all 0.2s; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(49,130,206,0.4); }
+        .btn-success { background: linear-gradient(135deg, #38a169, #2f855a); transition: all 0.2s; }
+        .btn-success:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(56,161,105,0.4); }
+        .btn-warning { background: linear-gradient(135deg, #dd6b20, #c05621); transition: all 0.2s; }
+        .btn-warning:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(221,107,32,0.4); }
+        .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+        #pdf-canvas { display: none; }
+        .subj-Physics { border-left: 4px solid #3182ce; }
+        .subj-Chemistry { border-left: 4px solid #38a169; }
+        .subj-Mathematics { border-left: 4px solid #dd6b20; }
+        .subj-General { border-left: 4px solid #805ad5; }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-slate-900 text-gray-800 dark:text-gray-200 transition-colors duration-300 font-sans min-h-screen">
+
+<!-- Setup Screen -->
+<div id="setup-screen" class="min-h-screen flex items-center justify-center p-4">
+    <div class="glass-panel rounded-2xl shadow-2xl p-8 max-w-2xl w-full fade-in">
+        <div class="text-center mb-8">
+            <div class="w-20 h-20 bg-gradient-to-br from-nta-blue to-nta-accent rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-lg">
+                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            </div>
+            <h1 class="text-3xl font-bold bg-gradient-to-r from-nta-blue to-nta-accent bg-clip-text text-transparent mb-2">JEE Mock Test Simulator</h1>
+            <p class="text-gray-500 dark:text-gray-400">AI-Powered Parsing for JEE PDFs</p>
+        </div>
+
+        <div class="space-y-6">
+            <!-- NEW API KEY FIELD -->
+            <div>
+                <label class="block text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300">Gemini API Key</label>
+                <input type="password" id="api-key" placeholder="Enter your free Google Gemini API Key" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-nta-accent outline-none text-sm">
+            </div>
+
+            <div class="relative">
+                <label class="block text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300">Upload Question Paper (PDF)</label>
+                <div class="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-8 text-center hover:border-nta-accent transition-colors cursor-pointer relative" id="drop-zone">
+                    <input type="file" id="pdf-input" accept=".pdf" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                    <svg class="w-12 h-12 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Drop PDF here or click to browse</p>
+                    <p id="file-name" class="text-sm font-medium text-nta-accent mt-2 hidden"></p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300">Hours</label>
+                    <input type="number" id="hours" min="0" max="6" value="3" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-nta-accent outline-none text-center font-mono text-lg">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300">Minutes</label>
+                    <input type="number" id="minutes" min="0" max="59" value="0" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-nta-accent outline-none text-center font-mono text-lg">
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-800 rounded-lg">
+                <div class="flex items-center gap-3">
+                    <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+                    <span class="text-sm font-medium">Dark Mode</span>
+                </div>
+                <button id="theme-toggle" class="relative w-14 h-7 bg-gray-300 dark:bg-nta-accent rounded-full transition-colors focus:outline-none">
+                    <span class="absolute left-1 top-1 w-5 h-5 bg-white rounded-full transition-transform dark:translate-x-7 shadow-md"></span>
+                </button>
+            </div>
+
+            <div id="upload-progress" class="hidden">
+                <div class="flex items-center gap-3 mb-2">
+                    <div class="loader"></div>
+                    <span class="text-sm font-medium text-nta-accent" id="progress-text">Analyzing PDF...</span>
+                </div>
+                <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div id="progress-bar" class="bg-nta-accent h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <button id="start-test" class="w-full btn-primary text-white font-semibold py-4 rounded-xl text-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                Start Mock Test
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Test Screen -->
+<div id="test-screen" class="hidden min-h-screen flex flex-col">
+    <!-- Keep existing test screen HTML exactly the same as original -->
+    <header class="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-gray-700 shadow-sm sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <div class="w-10 h-10 bg-gradient-to-br from-nta-blue to-nta-accent rounded-lg flex items-center justify-center">
+                        <span class="text-white font-bold text-sm">JEE</span>
+                    </div>
+                    <div>
+                        <h2 class="font-bold text-lg leading-tight">Mock Test Simulator</h2>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Computer Based Test</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-6">
+                    <div class="flex items-center gap-2 bg-gray-100 dark:bg-slate-700 px-4 py-2 rounded-lg">
+                        <svg class="w-5 h-5 text-nta-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <span id="timer" class="font-mono text-xl font-bold text-nta-blue dark:text-blue-400">03:00:00</span>
+                    </div>
+                    <button id="header-theme-toggle" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                        <svg class="w-5 h-5 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                        <svg class="w-5 h-5 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex-1 flex max-w-7xl mx-auto w-full">
+        <div class="flex-1 p-6 overflow-y-auto">
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-8 min-h-[calc(100vh-200px)]">
+                <div class="flex items-center justify-between mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
+                    <div class="flex items-center gap-3">
+                        <span class="bg-nta-blue text-white px-3 py-1 rounded-lg font-bold text-sm">Q<span id="q-number">1</span></span>
+                        <span id="q-status" class="status-badge bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-400">
+                            <span class="w-2 h-2 rounded-full bg-gray-400"></span> Not Visited
+                        </span>
+                    </div>
+                    <div class="flex items-center gap-2 text-sm text-gray-500">
+                        <span>Marks:</span><span class="font-bold text-nta-green">+4</span><span>/</span><span class="font-bold text-nta-red">-1</span>
+                    </div>
+                </div>
+
+                <div id="question-content" class="mb-8 text-lg leading-relaxed slide-in">
+                    <p class="font-medium mb-4">Loading question...</p>
+                </div>
+
+                <div id="options-container" class="space-y-3 mb-8"></div>
+
+                <div class="flex flex-wrap gap-3 pt-6 border-t border-gray-200 dark:border-gray-700">
+                    <button id="btn-save-next" class="btn-success text-white px-6 py-2.5 rounded-lg font-semibold text-sm flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> Save & Next
+                    </button>
+                    <button id="btn-clear" class="px-6 py-2.5 rounded-lg font-semibold text-sm border-2 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg> Clear Response
+                    </button>
+                    <button id="btn-save-review" class="btn-warning text-white px-6 py-2.5 rounded-lg font-semibold text-sm flex items-center gap-2">
+                        Save & Mark for Review
+                    </button>
+                    <button id="btn-review-next" class="px-6 py-2.5 rounded-lg font-semibold text-sm bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-2 border-purple-300 dark:border-purple-700 hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors flex items-center gap-2 ml-auto">
+                        Mark for Review & Next
+                    </button>
+                </div>
+
+                <div class="flex items-center justify-between mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <button id="btn-back" class="px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors flex items-center gap-2 disabled:opacity-50">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg> Back
+                    </button>
+                    <button id="btn-next" class="px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors flex items-center gap-2 disabled:opacity-50">
+                        Next <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="w-80 bg-white dark:bg-slate-800 border-l border-gray-200 dark:border-gray-700 p-6 overflow-y-auto">
+            <div class="mb-6">
+                <h3 class="font-semibold text-sm mb-3 text-gray-700 dark:text-gray-300">Question Palette</h3>
+                <div id="question-grid" class="grid grid-cols-5 gap-2"></div>
+            </div>
+            <button id="btn-submit-test" class="w-full bg-nta-red hover:bg-red-700 text-white font-bold py-3 rounded-lg transition-all transform hover:scale-[1.02] shadow-lg flex items-center justify-center gap-2">
+                Submit Test
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ==================== STATE & THEME LOGIC KEPT SAME ====================
+const state = {
+    questions: [], currentQuestion: 0, answers: {}, markedForReview: new Set(), visited: new Set(),
+    timeLimit: 0, timeRemaining: 0, timerInterval: null, isDarkMode: false, pdfText: ''
+};
+
+const elements = {
+    setupScreen: document.getElementById('setup-screen'), testScreen: document.getElementById('test-screen'),
+    pdfInput: document.getElementById('pdf-input'), dropZone: document.getElementById('drop-zone'),
+    fileName: document.getElementById('file-name'), hoursInput: document.getElementById('hours'),
+    minutesInput: document.getElementById('minutes'), startBtn: document.getElementById('start-test'),
+    themeToggle: document.getElementById('theme-toggle'), headerThemeToggle: document.getElementById('header-theme-toggle'),
+    progressBar: document.getElementById('progress-bar'), progressText: document.getElementById('progress-text'),
+    uploadProgress: document.getElementById('upload-progress'), timer: document.getElementById('timer'),
+    qNumber: document.getElementById('q-number'), qStatus: document.getElementById('q-status'),
+    questionContent: document.getElementById('question-content'), optionsContainer: document.getElementById('options-container'),
+    questionGrid: document.getElementById('question-grid'), apiKey: document.getElementById('api-key')
+};
+
+function initTheme() {
+    const saved = localStorage.getItem('jee-mock-theme');
+    if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        state.isDarkMode = true; document.documentElement.classList.add('dark');
+    }
+}
+function toggleTheme() {
+    state.isDarkMode = !state.isDarkMode;
+    document.documentElement.classList.toggle('dark');
+    localStorage.setItem('jee-mock-theme', state.isDarkMode ? 'dark' : 'light');
+}
+elements.themeToggle.addEventListener('click', toggleTheme);
+elements.headerThemeToggle.addEventListener('click', toggleTheme);
+
+// ==================== NEW AI PDF PROCESSING ====================
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+elements.pdfInput.addEventListener('change', handleFileSelect);
+
+function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (file) handleFile(file);
+}
+
+async function handleFile(file) {
+    const apiKey = elements.apiKey.value.trim();
+    if (!apiKey) {
+        alert("Please enter a Gemini API Key first.");
+        return;
+    }
+
+    elements.fileName.textContent = file.name;
+    elements.fileName.classList.remove('hidden');
+    elements.uploadProgress.classList.remove('hidden');
+    elements.startBtn.disabled = true;
+
+    try {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        let fullText = '';
+        
+        for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            fullText += textContent.items.map(item => item.str).join(' ') + '\n';
+            elements.progressBar.style.width = ((i / pdf.numPages) * 30) + '%';
+            elements.progressText.textContent = `Reading PDF page ${i}...`;
+        }
+
+        elements.progressText.textContent = "Sending to AI for analysis (this takes a moment)...";
+        
+        // NEW API CALL TO GEMINI
+        const prompt = `Extract all multiple choice questions from the following text. Ignore bio-data, instructions, and logos. Format the output strictly as a JSON array of objects. Each object must have: "id" (integer), "text" (string containing the question text), "options" (array of exactly 4 strings), "correctAnswer" (integer 0-3 indicating correct option if found, else null), "subject" (string "Physics", "Chemistry", or "Mathematics"). Do not include markdown formatting like \`\`\`json. Text: ${fullText.substring(0, 30000)}`;
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
+
+        elements.progressBar.style.width = '80%';
+        const data = await response.json();
+        
+        if (!response.ok) throw new Error(data.error.message || "API request failed");
+
+        let aiText = data.candidates[0].content.parts[0].text;
+        // Clean up markdown if the AI includes it anyway
+        aiText = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        const parsedQuestions = JSON.parse(aiText);
+
+        if (!Array.isArray(parsedQuestions) || parsedQuestions.length === 0) {
+            throw new Error("AI returned empty data.");
+        }
+
+        state.questions = parsedQuestions;
+        elements.progressBar.style.width = '100%';
+        elements.progressText.textContent = `AI successfully found ${state.questions.length} questions!`;
+        elements.startBtn.disabled = false;
+
+    } catch (error) {
+        console.error('AI Error:', error);
+        elements.progressText.textContent = `Error: ${error.message}`;
+        elements.progressBar.style.backgroundColor = '#e53e3e';
+    }
+}
+
+// ==================== TEST RENDERING ====================
+elements.startBtn.addEventListener('click', startTest);
+
+function startTest() {
+    const hours = parseInt(elements.hoursInput.value) || 0;
+    const minutes = parseInt(elements.minutesInput.value) || 0;
+    state.timeLimit = (hours * 3600 + minutes * 60) * 1000;
+    state.timeRemaining = state.timeLimit;
+
+    elements.setupScreen.classList.add('hidden');
+    elements.testScreen.classList.remove('hidden');
+
+    renderQuestionGrid();
+    loadQuestion(0);
+    startTimer();
+}
+
+function startTimer() {
+    const endTime = Date.now() + state.timeRemaining;
+    state.timerInterval = setInterval(() => {
+        const remaining = endTime - Date.now();
+        if (remaining <= 0) { clearInterval(state.timerInterval); alert("Time's Up!"); return; }
+        const hrs = Math.floor(remaining / 3600000);
+        const mins = Math.floor((remaining % 3600000) / 60000);
+        const secs = Math.floor((remaining % 60000) / 1000);
+        elements.timer.textContent = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }, 1000);
+}
+
+function loadQuestion(index) {
+    if (index < 0 || index >= state.questions.length) return;
+    state.currentQuestion = index;
+    state.visited.add(index);
+    const q = state.questions[index];
+
+    elements.qNumber.textContent = index + 1;
+    elements.questionContent.innerHTML = `<div class="mb-3"><span class="px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800">${q.subject || 'General'}</span></div><p class="font-medium text-lg">${q.text}</p>`;
+
+    elements.optionsContainer.innerHTML = '';
+    q.options.forEach((opt, i) => {
+        const isSelected = state.answers[index] === i;
+        const optionCard = document.createElement('div');
+        optionCard.className = `option-card flex items-center gap-4 p-4 rounded-xl cursor-pointer border-2 ${isSelected ? 'selected border-nta-accent bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`;
+        optionCard.innerHTML = `<input type="radio" class="custom-radio" ${isSelected ? 'checked' : ''}><span class="font-mono text-nta-accent">${String.fromCharCode(65 + i)}.</span><span class="flex-1">${opt}</span>`;
+        optionCard.addEventListener('click', () => { state.answers[index] = i; loadQuestion(index); updateGridButtons(); });
+        elements.optionsContainer.appendChild(optionCard);
+    });
+    updateGridButtons();
+}
+
+function renderQuestionGrid() {
+    elements.questionGrid.innerHTML = '';
+    state.questions.forEach((_, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'question-grid-btn w-full aspect-square rounded-lg font-mono text-sm font-bold flex items-center justify-center';
+        btn.textContent = i + 1;
+        btn.addEventListener('click', () => loadQuestion(i));
+        elements.questionGrid.appendChild(btn);
+    });
+}
+
+function updateGridButtons() {
+    Array.from(elements.questionGrid.children).forEach((btn, i) => {
+        btn.className = 'question-grid-btn w-full aspect-square rounded-lg font-mono text-sm font-bold flex items-center justify-center';
+        if (i === state.currentQuestion) btn.classList.add('current');
+        if (state.answers[i] !== undefined) btn.classList.add('answered');
+        else if (state.visited.has(i)) btn.classList.add('not-answered');
+        else btn.classList.add('bg-gray-200', 'text-gray-600');
+    });
+}
+
+// Navigation Buttons
+document.getElementById('btn-back').addEventListener('click', () => loadQuestion(state.currentQuestion - 1));
+document.getElementById('btn-next').addEventListener('click', () => loadQuestion(state.currentQuestion + 1));
+document.getElementById('btn-save-next').addEventListener('click', () => loadQuestion(state.currentQuestion + 1));
+document.getElementById('btn-clear').addEventListener('click', () => { delete state.answers[state.currentQuestion]; loadQuestion(state.currentQuestion); });
+
+initTheme();
+</script>
+</body>
+</html>
